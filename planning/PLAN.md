@@ -175,7 +175,7 @@ Both the simulator and the Massive client implement the same abstract interface.
 
 - Endpoint: `GET /api/stream/prices`
 - Long-lived SSE connection; client uses native `EventSource` API
-- Server pushes price updates for all tickers known to the system at a regular cadence (~500ms) — in the single-user model this is equivalent to the user's watchlist
+- Server pushes price updates for **all tickers currently in the user's watchlist** at a regular cadence (~500ms). Tickers held as positions but removed from the watchlist do NOT receive price updates — users should keep positions on their watchlist if they want live P&L tracking.
 - Each SSE event contains ticker, price, previous price, timestamp, and change direction
 - Client handles reconnection automatically (EventSource has built-in retry)
 
@@ -215,6 +215,8 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 - `avg_cost` REAL
 - `updated_at` TEXT (ISO timestamp)
 - UNIQUE constraint on `(user_id, ticker)`
+
+When a full sell reduces `quantity` to zero, the row is **updated to `quantity=0`** — it is never deleted. This preserves trade history context and simplifies frontend rendering (no disappearing rows mid-session).
 
 **trades** — Trade history (append-only log)
 - `id` TEXT PRIMARY KEY (UUID)
@@ -290,7 +292,7 @@ There is an OPENROUTER_API_KEY in the .env file in the project root.
 When the user sends a chat message, the backend:
 
 1. Loads the user's current portfolio context (cash, positions with P&L, watchlist with live prices, total portfolio value)
-2. Loads recent conversation history from the `chat_messages` table
+2. Loads the last 100 messages from `chat_messages` as conversation history
 3. Constructs a prompt with a system message, portfolio context, conversation history, and the user's new message
 4. Calls the LLM via LiteLLM → OpenRouter, requesting structured output, using the cerebras-inference skill
 5. Parses the complete structured JSON response
@@ -344,6 +346,18 @@ When `LLM_MOCK=true`, the backend returns deterministic mock responses instead o
 - Development without an API key
 - CI/CD pipelines
 
+The fixed mock response is always:
+
+```json
+{
+  "message": "I've reviewed your portfolio. I'll pick up 1 share of AAPL to demonstrate trade execution.",
+  "trades": [{"ticker": "AAPL", "side": "buy", "quantity": 1}],
+  "watchlist_changes": []
+}
+```
+
+This response is sufficient to exercise the full chat→trade execution→UI update flow in E2E tests. With $10k starting cash and AAPL seeded at ~$190, the buy always succeeds.
+
 ---
 
 ## 10. Frontend Design
@@ -352,12 +366,12 @@ When `LLM_MOCK=true`, the backend returns deterministic mock responses instead o
 
 The frontend is a single-page application with a dense, terminal-inspired layout. The specific component architecture and layout system is up to the Frontend Engineer, but the UI should include these elements:
 
-- **Watchlist panel** — grid/table of watched tickers with: ticker symbol, current price (flashing green/red on change), daily change %, and a sparkline mini-chart (accumulated from SSE since page load)
+- **Watchlist panel** — grid/table of watched tickers with: ticker symbol, current price (flashing green/red on change), change % since the previous SSE tick (i.e. tick-over-tick, not a true daily change), and a sparkline mini-chart (accumulated from SSE since page load)
 - **Main chart area** — larger chart for the currently selected ticker, with at minimum price over time. Clicking a ticker in the watchlist selects it here.
 - **Portfolio heatmap** — treemap visualization where each rectangle is a position, sized by portfolio weight, colored by P&L (green = profit, red = loss)
 - **P&L chart** — line chart showing total portfolio value over time, using data from `portfolio_snapshots`
 - **Positions table** — tabular view of all positions: ticker, quantity, avg cost, current price, unrealized P&L, % change
-- **Trade bar** — simple input area: ticker field, quantity field, buy button, sell button. Market orders, instant fill.
+- **Trade bar** — simple input area: ticker field, quantity field (fractional quantities supported — accepts decimals), buy button, sell button. Market orders, instant fill.
 - **AI chat panel** — docked/collapsible sidebar. Message input, scrolling conversation history, loading indicator while waiting for LLM response. Trade executions and watchlist changes shown inline as confirmations.
 - **Header** — portfolio total value (updating live), connection status indicator, cash balance
 
@@ -454,3 +468,4 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 - Portfolio visualization: heatmap renders with correct colors, P&L chart has data points
 - AI chat (mocked): send a message, receive a response, trade execution appears inline
 - SSE resilience: disconnect and verify reconnection
+
