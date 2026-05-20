@@ -129,3 +129,27 @@ class TestGBMSimulator:
         if '.' in price_str:
             decimal_part = price_str.split('.')[1]
             assert len(decimal_part) <= 2
+
+    def test_all_default_tickers_cholesky_is_valid(self):
+        """Cholesky decomposition must succeed for the full 10-ticker default set."""
+        all_tickers = list(SEED_PRICES.keys())
+        sim = GBMSimulator(tickers=all_tickers)
+        assert sim._cholesky is not None
+        # step() must run without error and return all tickers
+        result = sim.step()
+        assert set(result.keys()) == set(all_tickers)
+
+    def test_all_default_tickers_prices_positive(self):
+        """All 10 default tickers must remain positive after 100 steps."""
+        sim = GBMSimulator(tickers=list(SEED_PRICES.keys()))
+        for _ in range(100):
+            prices = sim.step()
+        for ticker, price in prices.items():
+            assert price > 0, f"{ticker} went non-positive: {price}"
+
+    def test_get_tickers_returns_copy(self):
+        """get_tickers() must return a copy — mutations must not affect the simulator."""
+        sim = GBMSimulator(tickers=["AAPL", "GOOGL"])
+        tickers = sim.get_tickers()
+        tickers.append("FAKE")
+        assert "FAKE" not in sim.get_tickers()

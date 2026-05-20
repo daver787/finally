@@ -58,7 +58,8 @@ class TestMassiveDataSource:
         good_snap = _make_snapshot("AAPL", 190.50, 1707580800000)
         bad_snap = MagicMock()
         bad_snap.ticker = "BAD"
-        bad_snap.last_trade = None  # Will cause AttributeError
+        bad_snap.last_trade = None  # No last trade
+        bad_snap.day = None         # No day data either → should be skipped
 
         with patch.object(source, "_fetch_snapshots", return_value=[good_snap, bad_snap]):
             await source._poll_once()
@@ -66,6 +67,29 @@ class TestMassiveDataSource:
         # Good ticker processed, bad one skipped
         assert cache.get_price("AAPL") == 190.50
         assert cache.get_price("BAD") is None
+
+    async def test_falls_back_to_day_close_when_no_last_trade(self):
+        """When last_trade is None, the day close price must be used instead."""
+        cache = PriceCache()
+        source = MassiveDataSource(
+            api_key="test-key",
+            price_cache=cache,
+            poll_interval=60.0,
+        )
+        source._tickers = ["AAPL"]
+        source._client = MagicMock()
+
+        snap = MagicMock()
+        snap.ticker = "AAPL"
+        snap.last_trade = None
+        snap.day = MagicMock()
+        snap.day.close = 187.45   # day close price (SDK uses snake_case)
+        snap.day.c = None
+
+        with patch.object(source, "_fetch_snapshots", return_value=[snap]):
+            await source._poll_once()
+
+        assert cache.get_price("AAPL") == 187.45
 
     async def test_api_error_does_not_crash(self):
         """Test that API errors don't crash the poller."""

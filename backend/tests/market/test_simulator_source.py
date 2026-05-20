@@ -136,3 +136,38 @@ class TestSimulatorDataSource:
         # Just verify it starts and stops cleanly
         await asyncio.sleep(0.2)
         await source.stop()
+
+    async def test_add_ticker_normalized_to_uppercase(self):
+        """Ticker symbols must be normalized to uppercase before being added."""
+        cache = PriceCache()
+        source = SimulatorDataSource(price_cache=cache, update_interval=0.1)
+        await source.start(["AAPL"])
+
+        await source.add_ticker("tsla")
+        assert "TSLA" in source.get_tickers()
+        assert "tsla" not in source.get_tickers()
+        assert cache.get("TSLA") is not None
+
+        await source.stop()
+
+    async def test_remove_ticker_normalized_to_uppercase(self):
+        """Lowercase remove must match the uppercase ticker stored internally."""
+        cache = PriceCache()
+        source = SimulatorDataSource(price_cache=cache, update_interval=0.1)
+        await source.start(["AAPL", "TSLA"])
+
+        await source.remove_ticker("tsla")
+        assert "TSLA" not in source.get_tickers()
+        assert cache.get("TSLA") is None
+
+        await source.stop()
+
+    async def test_add_ticker_before_start_is_noop(self):
+        """add_ticker() before start() must not raise and must not persist the ticker."""
+        cache = PriceCache()
+        source = SimulatorDataSource(price_cache=cache, update_interval=0.1)
+
+        # _sim is None at this point — should be a silent no-op
+        await source.add_ticker("AAPL")
+        assert source.get_tickers() == []
+        assert cache.get("AAPL") is None

@@ -98,14 +98,26 @@ class MassiveDataSource(MarketDataSource):
             processed = 0
             for snap in snapshots:
                 try:
-                    price = snap.last_trade.price
-                    # Massive timestamps are Unix milliseconds → convert to seconds
-                    timestamp = snap.last_trade.timestamp / 1000.0
-                    self._cache.update(
-                        ticker=snap.ticker,
-                        price=price,
-                        timestamp=timestamp,
-                    )
+                    ticker = snap.ticker
+                    price: float | None = None
+                    timestamp: float | None = None
+
+                    # Primary: most recent trade price
+                    if snap.last_trade is not None:
+                        price = snap.last_trade.price
+                        timestamp = snap.last_trade.timestamp / 1000.0
+
+                    # Fallback: day close price (outside market hours or first tick)
+                    if price is None and snap.day is not None:
+                        day_price = getattr(snap.day, "close", None) or getattr(snap.day, "c", None)
+                        if isinstance(day_price, (int, float)) and day_price > 0:
+                            price = float(day_price)
+
+                    if price is None:
+                        logger.warning("No price available for %s, skipping", ticker)
+                        continue
+
+                    self._cache.update(ticker=ticker, price=price, timestamp=timestamp)
                     processed += 1
                 except (AttributeError, TypeError) as e:
                     logger.warning(
