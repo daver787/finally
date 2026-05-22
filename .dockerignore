@@ -1,0 +1,45 @@
+# Git
+.git
+.github
+.gitignore
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+**/__pycache__
+**/*.py[codz]
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.coverage
+**/htmlcov
+**/.eggs
+**/*.egg-info
+
+# Node / Next.js
+**/node_modules
+**/.next
+**/out
+**/.turbo
+**/npm-debug.log*
+
+# Runtime database
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+
+# Tests & docs
+test
+planning
+*.md
+!backend/README.md
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store

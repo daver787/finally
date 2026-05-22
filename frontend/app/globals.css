@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ============================================================
+   FinAlly — Trading Terminal Design System
+   ============================================================ */
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --color-bg-base: #0a0e16;
+  --color-bg-panel: #0d1117;
+  --color-bg-panel-2: #131a26;
+  --color-bg-elevated: #1a2231;
+  --color-border: #232d3f;
+  --color-border-bright: #324159;
+
+  --color-ink: #e6edf3;
+  --color-ink-dim: #8b97a8;
+  --color-ink-faint: #56627a;
+
+  --color-accent: #ecad0a;
+  --color-blue: #209dd7;
+  --color-purple: #753991;
+  --color-up: #2ecc71;
+  --color-down: #ff4d5e;
+}
+
+:root {
+  --bg-base: #0a0e16;
+  --bg-panel: #0d1117;
+  --bg-panel-2: #131a26;
+  --bg-elevated: #1a2231;
+  --border: #232d3f;
+  --border-bright: #324159;
+  --ink: #e6edf3;
+  --ink-dim: #8b97a8;
+  --ink-faint: #56627a;
+  --accent: #ecad0a;
+  --blue: #209dd7;
+  --purple: #753991;
+  --up: #2ecc71;
+  --down: #ff4d5e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--bg-base);
+  color: var(--ink);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(32, 157, 215, 0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(236, 173, 10, 0.05), transparent);
+  background-attachment: fixed;
+}
+
+/* Scrollbars — thin, terminal-style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #41526e;
+}
+
+/* Tabular numerals for all numeric data */
+.tnum {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ============================================================
+   Price flash animations
+   ============================================================ */
+.flash-green {
+  animation: flashGreen 0.55s ease-out;
+}
+.flash-red {
+  animation: flashRed 0.55s ease-out;
+}
+@keyframes flashGreen {
+  0% {
+    background-color: rgba(46, 204, 113, 0.32);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes flashRed {
+  0% {
+    background-color: rgba(255, 77, 94, 0.32);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Price text flash (for cells without a row background) */
+.tick-up {
+  color: var(--up);
+}
+.tick-down {
+  color: var(--down);
+}
+
+/* ============================================================
+   Panel chrome
+   ============================================================ */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  position: relative;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+}
+
+.panel-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* Glow utilities */
+.glow-up {
+  box-shadow: 0 0 0 1px rgba(46, 204, 113, 0.4), 0 0 14px rgba(46, 204, 113, 0.18);
+}
+.glow-down {
+  box-shadow: 0 0 0 1px rgba(255, 77, 94, 0.4), 0 0 14px rgba(255, 77, 94, 0.18);
+}
+
+/* Connection pulse */
+.dot-pulse {
+  position: relative;
+}
+.dot-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  animation: dotPulse 2s ease-out infinite;
+}
+@keyframes dotPulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+
+/* Spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-bright);
+  border-top-color: var(--blue);
+  border-radius: 999px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Staggered panel entrance */
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.panel-in {
+  animation: panelIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Chat message entrance */
+@keyframes msgIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.msg-in {
+  animation: msgIn 0.3s ease-out both;
+}
+
+/* Inputs */
+.field {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--ink);
+  font-family: var(--font-mono), monospace;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(32, 157, 215, 0.15);
+}
+.field::placeholder {
+  color: var(--ink-faint);
+}
+
+/* Buttons */
+.btn {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  transition: filter 0.12s, transform 0.05s;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
