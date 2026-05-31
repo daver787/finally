@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #ecad0a;
+  --color-primary: #209dd7;
+  --color-purple: #753991;
+  --color-bg-base: #0d1117;
+  --color-bg-surface: #161b22;
+  --color-bg-elevated: #1c2128;
+  --color-border: #30363d;
+  --color-price-up: #26a641;
+  --color-price-down: #f85149;
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #484f58;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+/* Price flash animations — applied via key={timestamp} remount trick so each
+   new price restart the CSS keyframes without setTimeout / class toggling. */
+.price-flash-up {
+  animation: flash-green 500ms ease-out;
+}
+.price-flash-down {
+  animation: flash-red 500ms ease-out;
+}
+
+@keyframes flash-green {
+  0% {
+    background-color: rgba(38, 166, 65, 0.5);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes flash-red {
+  0% {
+    background-color: rgba(248, 81, 73, 0.4);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Connection-status dot uses this pulse while reconnecting. */
+@keyframes pulse-amber {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.connection-pulse {
+  animation: pulse-amber 1.5s ease-in-out infinite;
+}

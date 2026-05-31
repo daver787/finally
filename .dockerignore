@@ -1,0 +1,44 @@
+# Secrets and env files — MUST NOT enter the build context.
+# Nested patterns (**/) are required: bare `.env.*` matches only the context
+# root, so frontend/.env.local would otherwise leak into the Stage-1 frontend
+# build. That file sets NEXT_PUBLIC_API_BASE=http://localhost:8000 for `next dev`;
+# baking it into the production export hardcodes the API/SSE origin to
+# localhost:8000, which breaks same-origin serving anywhere the browser's
+# localhost is not the app (E2E compose network, cloud deploys). Excluding it
+# lets `npm run build` fall back to the relative-URL default (NEXT_PUBLIC_API_BASE="").
+.env
+.env.*
+**/.env
+**/.env.*
+# VCS
+.git
+.gitignore
+# GSD planning artifacts
+.planning
+.claude
+# Python bytecode and virtualenvs
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+# Frontend caches (Stage 1 rebuilds these from scratch)
+**/node_modules
+frontend/.next
+frontend/out
+# Committed frontend export — Stage 1 regenerates it into the image. If the
+# stale committed copy entered the context, `COPY backend/ /app/backend/` would
+# land it at /app/backend/static and the later `COPY --from=frontend /build/out`
+# would MERGE (not replace) over it, leaving orphaned stale chunks (e.g. an old
+# bundle with a hardcoded localhost:8000 API origin) alongside the fresh export.
+backend/static
+# SQLite runtime artifact (must not be baked into image)
+db/*.db
+db/*.db-journal
+# macOS/Editor junk
+**/.DS_Store
+**/*.log
+# Test infra
+test
