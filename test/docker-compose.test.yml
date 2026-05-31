@@ -1,0 +1,46 @@
+# FinAlly E2E harness — builds the real `finally` image and drives it in a browser.
+#
+# Run + propagate the runner's exit code:
+#   docker compose -f test/docker-compose.test.yml up \
+#     --build --abort-on-container-exit --exit-code-from playwright
+#
+# No secrets are baked in: LLM_MOCK=true makes the LLM API key unnecessary, and
+# MASSIVE_API_KEY="" forces the in-process simulator so prices change for E2E-02.
+# No host/named volume → each run reseeds a fresh $10k / 10-ticker SQLite DB.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # Distinct from the Phase 4 runtime container `finally-app` — keeps the test
+    # stack isolated from production (no shared identity or volume).
+    container_name: finally-test-app
+    environment:
+      # Deterministic chat (E2E-06) — no external LLM provider call.
+      LLM_MOCK: "true"
+      # Empty → force the GBM simulator so watchlist prices stream/change.
+      MASSIVE_API_KEY: ""
+    # Image already defines HEALTHCHECK (GET /api/health via healthcheck.py); the
+    # playwright service gates on it below. No override needed.
+    networks:
+      default:
+        aliases:
+          # Dotted alias: Chromium auto-upgrades bare single-label hostnames
+          # (http://app) to HTTPS, breaking the plain-HTTP navigation with
+          # ERR_SSL_PROTOCOL_ERROR. A dotted host avoids that heuristic.
+          - app.local
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      # Dotted host alias (see app.networks.default.aliases) avoids Chromium's
+      # bare-hostname HTTPS auto-upgrade against the plain-HTTP app.
+      BASE_URL: http://app.local:8000
+    working_dir: /work
+    volumes:
+      # Mount the test/ dir (specs, config, package.json, vendored node_modules).
+      - .:/work
+    command: sh -c "npm ci && npx playwright test"
