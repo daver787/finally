@@ -43,9 +43,28 @@ SYSTEM_PROMPT = (
     "Analyze the user's portfolio, suggest trades with reasoning, and execute "
     "trades when the user asks or agrees. Be concise and data-driven. Only "
     "trade tickers currently on the watchlist; to trade a new ticker, ADD it "
-    "to the watchlist in the same response. Always respond with valid JSON "
-    "matching the ChatResponse schema."
+    "to the watchlist in the same response.\n\n"
+    "You MUST reply with a SINGLE JSON object using EXACTLY these top-level "
+    "field names:\n"
+    "{\n"
+    '  "message": "<your conversational reply to the user>",\n'
+    '  "trades": [{"ticker": "AAPL", "side": "buy", "quantity": 10}],\n'
+    '  "watchlist_changes": [{"ticker": "PYPL", "action": "add"}]\n'
+    "}\n"
+    'The "message" field is REQUIRED and must be a string containing your full '
+    'reply. Use empty arrays [] for "trades" and "watchlist_changes" when there '
+    "are none. Do NOT use any other top-level key names (no \"response\", "
+    '"reply", "thoughts", "answer", etc.). You may use Markdown (bold, bullet '
+    'lists, tables) inside the "message" string to format your reply.'
 )
+
+# The structured-output model (gpt-oss-120b via Cerebras) is not strictly
+# constrained to our schema and occasionally wraps its reply under a different
+# top-level key (e.g. {"response": ...} or {"thoughts": ..., "answer": ...}).
+# When that happens we still want to surface the real reply rather than the
+# canned "trouble formatting" fallback, so tolerant parsing maps any of these
+# alias keys onto the required `message` field.
+_MESSAGE_ALIASES = ("message", "response", "reply", "answer", "text", "content", "thoughts")
 
 # Fixed mock response (PLAN.md §9). Used when LLM_MOCK=true to skip the
 # OpenRouter call entirely so E2E tests / CI / dev have no external dependency.
@@ -62,6 +81,68 @@ MOCK_RESPONSE = ChatResponse(
 def _normalize_ticker(ticker: str) -> str:
     """Uppercase + strip a ticker symbol."""
     return ticker.upper().strip()
+
+
+def _coerce_chat_response(content: str) -> ChatResponse:
+    """Parse LLM content into a ChatResponse, tolerating field-name drift.
+
+    The model usually returns the exact schema, in which case strict
+    validation succeeds immediately. When it drifts (wrong top-level key for
+    the reply, or malformed trades/watchlist arrays) we recover the real reply
+    instead of discarding it:
+
+    1. Strict ``ChatResponse.model_validate_json`` — the happy path.
+    2. ``json.loads`` + remap any ``_MESSAGE_ALIASES`` key onto ``message``,
+       defaulting ``trades`` / ``watchlist_changes`` to empty lists, then
+       re-validate (so well-formed actions are still honored).
+    3. If only the actions are malformed, keep the message and drop the
+       actions rather than failing the whole turn.
+
+    Raises if the content is not JSON / has no usable reply text — the caller
+    turns that into the user-facing "trouble formatting" fallback.
+    """
+    try:
+        return ChatResponse.model_validate_json(content)
+    except Exception:
+        pass
+
+    data = json.loads(content)  # may raise json.JSONDecodeError -> caller fallback
+
+    # A bare JSON string is itself a usable reply.
+    if isinstance(data, str):
+        if data.strip():
+            return ChatResponse(message=data.strip(), trades=[], watchlist_changes=[])
+        raise ValueError("empty LLM reply string")
+
+    if not isinstance(data, dict):
+        raise ValueError(f"LLM reply was not a JSON object (got {type(data).__name__})")
+
+    message = next(
+        (
+            data[key].strip()
+            for key in _MESSAGE_ALIASES
+            if isinstance(data.get(key), str) and data[key].strip()
+        ),
+        None,
+    )
+    if message is None:
+        raise ValueError("no usable message field in LLM reply")
+
+    trades = data.get("trades")
+    watchlist = data.get("watchlist_changes")
+    if watchlist is None:
+        watchlist = data.get("watchlist_update")  # observed drift alias
+    normalized = {
+        "message": message,
+        "trades": trades if isinstance(trades, list) else [],
+        "watchlist_changes": watchlist if isinstance(watchlist, list) else [],
+    }
+    try:
+        return ChatResponse.model_validate(normalized)
+    except Exception:
+        # Reply text is good but the action arrays are malformed — keep the
+        # reply, drop the actions (better than failing the whole response).
+        return ChatResponse(message=message, trades=[], watchlist_changes=[])
 
 
 async def _apply_watchlist_changes(
@@ -154,7 +235,11 @@ async def handle_chat(
         response = MOCK_RESPONSE
     else:
         # Imported lazily inside the try block so any import failure is
-        # caught and surfaced as a graceful error message (not a 500).
+        # caught and surfaced as a graceful error message (not a 500). The
+        # network call and the response parsing are handled separately so a
+        # transient API error and a schema-drift parse failure produce
+        # distinct, accurate fallbacks.
+        content: str | None = None
         try:
             from litellm import acompletion
             raw = await acompletion(
@@ -166,7 +251,6 @@ async def handle_chat(
                 timeout=30,
             )
             content = raw.choices[0].message.content
-            response = ChatResponse.model_validate_json(content)
         except Exception as exc:  # noqa: BLE001 — graceful degrade for any LLM failure
             if isinstance(exc, TimeoutError) or "timeout" in str(exc).lower():
                 logger.warning("LLM call timed out: %s", exc)
@@ -176,7 +260,24 @@ async def handle_chat(
                     watchlist_changes=[],
                 )
             else:
-                logger.warning("LLM returned unparseable response: %s", exc)
+                logger.warning("LLM call failed: %s", exc)
+                response = ChatResponse(
+                    message=(
+                        "I had trouble reaching the AI service, please try again."
+                    ),
+                    trades=[],
+                    watchlist_changes=[],
+                )
+
+        if content is not None:
+            try:
+                response = _coerce_chat_response(content)
+            except Exception as exc:  # noqa: BLE001 — last-resort parse fallback
+                logger.warning(
+                    "LLM returned unparseable response: %s; raw=%r",
+                    exc,
+                    content[:500] if isinstance(content, str) else content,
+                )
                 response = ChatResponse(
                     message=(
                         "I had trouble formatting my response, please try again."
